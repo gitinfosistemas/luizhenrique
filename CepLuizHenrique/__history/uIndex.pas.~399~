@@ -1,0 +1,347 @@
+unit uIndex;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants,
+  System.Classes, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
+  Vcl.StdCtrls, Vcl.ExtCtrls, Data.DB, Datasnap.DBClient, Vcl.Buttons,
+  Vcl.Mask, Vcl.DBCtrls,System.JSON ,Data.DBXJSON, DBXJSONReflect,
+  idHTTP, IdSSLOpenSSL, IdSMTP, IdMessage, IdText, comobj,
+  IdAttachmentFile,  IdExplicitTLSClientServerBase,SHELLAPI;
+
+type
+  TIndex = class(TForm)
+    GroupBox1: TGroupBox;
+    GroupBox2: TGroupBox;
+    dsCadastro: TDataSource;
+    BtnGravar: TBitBtn;
+    btnSair: TBitBtn;
+    Label1: TLabel;
+    EdNome: TDBEdit;
+    Label2: TLabel;
+    EdIdentidade: TDBEdit;
+    Label3: TLabel;
+    EdCPF: TDBEdit;
+    Label4: TLabel;
+    EdTelefone: TDBEdit;
+    Label5: TLabel;
+    EdEmail: TDBEdit;
+    Label6: TLabel;
+    EdCep: TDBEdit;
+    Label7: TLabel;
+    EdLogradouro: TDBEdit;
+    Label8: TLabel;
+    EdNumero: TDBEdit;
+    Label9: TLabel;
+    EdComplemento: TDBEdit;
+    Label10: TLabel;
+    EdBairro: TDBEdit;
+    Label11: TLabel;
+    EdCidade: TDBEdit;
+    Label12: TLabel;
+    EdEstado: TDBEdit;
+    Label13: TLabel;
+    EdPais: TDBEdit;
+    CdsCadastro: TClientDataSet;
+    CdsCadastroNome: TStringField;
+    CdsCadastroIdentidade: TStringField;
+    CdsCadastroTelefone: TStringField;
+    CdsCadastroEmail: TStringField;
+    CdsCadastroCep: TStringField;
+    CdsCadastroLogradouro: TStringField;
+    CdsCadastroNumero: TStringField;
+    CdsCadastroComplemento: TStringField;
+    CdsCadastroBairro: TStringField;
+    CdsCadastroCidade: TStringField;
+    CdsCadastroEstado: TStringField;
+    CdsCadastroPais: TStringField;
+    CdsCadastroCPF: TStringField;
+    BtnConsultaCep: TBitBtn;
+    BtnIncluir: TBitBtn;
+    BitBtn1: TBitBtn;
+    btnCancelar: TBitBtn;
+    procedure btnSairClick(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormShow(Sender: TObject);
+    procedure BtnIncluirClick(Sender: TObject);
+    procedure EdNumeroKeyPress(Sender: TObject; var Key: Char);
+    procedure BtnConsultaCepClick(Sender: TObject);
+    procedure EdCepKeyPress(Sender: TObject; var Key: Char);
+    procedure BtnGravarClick(Sender: TObject);
+    procedure BitBtn1Click(Sender: TObject);
+    procedure btnCancelarClick(Sender: TObject);
+  private
+    { Private declarations }
+    function  GetCEP(CEP:string): TJSONObject;
+    procedure CarregaCep(JSON: TJSONObject);
+    procedure LimpaCampos;
+    procedure ValidaCampos;
+    procedure EnviarEmail(email:string);
+  public
+    { Public declarations }
+  end;
+
+var
+  Index: TIndex;
+  path : string;
+
+implementation
+
+{$R *.dfm}
+
+uses uConsulta;
+
+procedure TIndex.EnviarEmail;
+var
+  IdSSLIOHandlerSocket: TIdSSLIOHandlerSocketOpenSSL;
+  IdSMTP: TIdSMTP;
+  IdMessage: TIdMessage;
+  IdText: TIdText;
+  sAnexo: string;
+begin
+   IdSSLIOHandlerSocket := TIdSSLIOHandlerSocketOpenSSL.Create(Self);
+   IdSMTP    := TIdSMTP.Create(Self);
+   IdMessage := TIdMessage.Create(Self);
+
+    try
+    IdSSLIOHandlerSocket.SSLOptions.Method := sslvSSLv23;
+    IdSSLIOHandlerSocket.SSLOptions.Mode := sslmClient;
+    IdSMTP.IOHandler := IdSSLIOHandlerSocket;
+    IdSMTP.UseTLS    := utUseImplicitTLS;
+    IdSMTP.AuthType  := satDefault;
+    IdSMTP.Port      := 465;
+    IdSMTP.Host      := 'smtp.gmail.com';
+    IdSMTP.Username  := 'git.infosistemas@gmail.com';
+    IdSMTP.Password  := 'bbm221405';
+
+    IdMessage.From.Address           := 'git.infosistemas@gmail.com';
+    IdMessage.From.Name              := 'git infosistemas';
+    IdMessage.ReplyTo.EMailAddresses := IdMessage.From.Address;
+    IdMessage.Recipients.Add.Text    := 'git.infosistemas@gmail.com';
+    IdMessage.Subject                := 'Assunto envio de arquivo xml';
+    IdMessage.Encoding               := meMIME;
+
+    IdText := TIdText.Create(IdMessage.MessageParts);
+    IdText.Body.Add('Anexo arquivo XML');
+    IdText.ContentType := 'text/plain; charset=iso-8859-1';
+
+    sAnexo := path+'\cadastro.xml';
+    if FileExists(sAnexo) then
+    begin
+      TIdAttachmentFile.Create(IdMessage.MessageParts, sAnexo);
+    end;
+
+    //Conexão e autenticação
+    try
+      IdSMTP.Connect;
+      IdSMTP.Authenticate;
+    except on E:Exception do
+    begin
+      MessageDlg('Erro na conexão ou autenticação: ' + E.Message, mtWarning, [mbOK], 0);
+      Exit;
+    end;
+    end;
+
+    //Envio da mensagem
+    try
+      IdSMTP.Send(IdMessage);
+      MessageDlg('Mensagem enviada com sucesso!', mtInformation, [mbOK], 0);
+    except On E:Exception do
+    begin
+      MessageDlg('Erro ao enviar a mensagem: ' + E.Message, mtWarning, [mbOK], 0);
+    end;
+    end;
+    finally
+      IdSMTP.Disconnect;
+      UnLoadOpenSSLLibrary;
+      FreeAndNil(IdMessage);
+      FreeAndNil(IdSSLIOHandlerSocket);
+      FreeAndNil(IdSMTP);
+    end;
+
+end;
+
+procedure TIndex.btnCancelarClick(Sender: TObject);
+begin
+   CdsCadastro.Cancel;
+end;
+
+procedure TIndex.BtnConsultaCepClick(Sender: TObject);
+var
+   LJsonObj: TJSONObject;
+begin
+   if EdCep.Field.Value = EmptyStr then
+   begin
+      showMessage('CEP incorreto');
+      LimpaCampos;
+      exit;
+   end;
+
+   LJsonObj := GetCEP(EdCep.Field.Value);
+   if LJsonOBJ <> nil then
+   begin
+      Screen.Cursor := crSQLWait;
+      CarregaCep(LJsonObj);
+      Screen.Cursor := crDefault;
+   end
+   else
+   begin
+      showMessage('CEP inválido ou não encontrado');
+      LimpaCampos;
+      exit;
+   end;
+
+
+end;
+
+procedure TIndex.BtnGravarClick(Sender: TObject);
+begin
+  ValidaCampos;
+  path := ExtractFilePath(Application.ExeName);
+  CdsCadastro.Post;
+  CdsCadastro.SaveToFile(path+'\cadastro.xml', dfXML);
+  Screen.Cursor := crSQLWait;
+  EnviarEmail;
+  Screen.Cursor := crDefault;
+  Application.MessageBox('Informação dados gravados com sucesso. ','Index',MB_OK+ MB_ICONWARNING);
+
+end;
+
+procedure TIndex.BitBtn1Click(Sender: TObject);
+begin
+  try
+    Application.CreateForm(TFrmConsulta,FrmConsulta);
+    FrmConsulta.ShowModal;
+  finally
+    FreeAndNil(FrmConsulta);
+  end;
+
+end;
+
+
+procedure TIndex.BtnIncluirClick(Sender: TObject);
+begin
+  CdsCadastro.Append;
+  EdNome.SetFocus;
+end;
+
+procedure TIndex.btnSairClick(Sender: TObject);
+begin
+  Close;
+end;
+
+procedure TIndex.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  CdsCadastro.Close;
+end;
+
+procedure TIndex.FormShow(Sender: TObject);
+begin
+  CdsCadastro.Open;
+  path := ExtractFilePath(Application.ExeName);
+  BtnIncluir.SetFocus;
+end;
+
+function TIndex.GetCEP(CEP: string): TJSONObject;
+var
+   HTTP: TIdHTTP;
+   IDSSLHandler : TIdSSLIOHandlerSocketOpenSSL;
+   Response: TStringStream;
+   LJsonObj: TJSONObject;
+begin
+   try
+      HTTP := TIdHTTP.Create;
+      IDSSLHandler := TIdSSLIOHandlerSocketOpenSSL.Create;
+      HTTP.IOHandler := IDSSLHandler;
+      Response := TStringStream.Create('');
+      HTTP.Get('https://viacep.com.br/ws/' + CEP + '/json', Response);
+      if (HTTP.ResponseCode = 200) and not(Utf8ToAnsi(Response.DataString) = '{'#$A'  "erro": true'#$A'}') then
+         Result := TJSONObject.ParseJSONValue(TEncoding.ASCII.GetBytes( Utf8ToAnsi(Response.DataString)), 0) as TJSONObject;
+   finally
+      FreeAndNil(HTTP);
+      FreeAndNil(IDSSLHandler);
+      Response.Destroy;
+   end;
+end;
+
+procedure TIndex.CarregaCep(JSON: TJSONObject);
+begin
+   EdLogradouro.Field.Value  := JSON.Get('logradouro').JsonValue.Value;
+   EdCidade.Field.Value      := UpperCase(JSON.Get('localidade').JsonValue.Value);
+   EdBairro.Field.Value      := JSON.Get('bairro').JsonValue.Value;
+   EdEstado.Field.Value      := JSON.Get('uf').JsonValue.Value;
+   EdComplemento.Field.Value := JSON.Get('complemento').JsonValue.Value;
+end;
+
+procedure TIndex.EdCepKeyPress(Sender: TObject; var Key: Char);
+begin
+  if not (key in ['0'..'9',#8]) then
+     Key := #0;
+end;
+
+procedure TIndex.EdNumeroKeyPress(Sender: TObject; var Key: Char);
+begin
+  if not (key in ['0'..'9',#8]) then
+     Key := #0;
+end;
+
+procedure TIndex.LimpaCampos;
+begin
+  CdsCadastro.Cancel;
+end;
+
+procedure TIndex.ValidaCampos;
+begin
+  if EdNome.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar o Nome','Index',MB_OK+ MB_ICONWARNING);
+    EdNome.Field.FocusControl;
+    Abort
+  end;
+
+  if EdIdentidade.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar o numero da Identidade','Index',MB_OK+ MB_ICONWARNING);
+    EdIdentidade.Field.FocusControl;
+    Abort
+  end;
+
+  if EdCPF.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar o numero do CPF','Index',MB_OK+ MB_ICONWARNING);
+    EdCPF.Field.FocusControl;
+    Abort
+  end;
+
+  if EdTelefone.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar o numero do Telefone','Index',MB_OK+ MB_ICONWARNING);
+    EdTelefone.Field.FocusControl;
+    Abort
+  end;
+
+  if EdEmail.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar o Email','Index',MB_OK+ MB_ICONWARNING);
+    EdEmail.Field.FocusControl;
+    Abort
+  end;
+
+  if EdNumero.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar o numero do Logradouro','Index',MB_OK+ MB_ICONWARNING);
+    EdNumero.Field.FocusControl;
+    Abort
+  end;
+
+  if EdPais.Field.IsNull then
+  begin
+    Application.MessageBox('Atenção informar País','Index',MB_OK+ MB_ICONWARNING);
+    EdPais.Field.FocusControl;
+    Abort
+  end;
+
+end;
+
+end.

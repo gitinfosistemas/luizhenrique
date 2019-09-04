@@ -1,0 +1,15 @@
+program LuizHenriqueCep;
+
+uses
+  Vcl.Forms,
+  uIndex in 'uIndex.pas' {Index},
+  uConsulta in 'uConsulta.pas' {FrmConsulta};
+
+{$R *.res}
+
+begin
+  Application.Initialize;
+  Application.MainFormOnTaskbar := True;
+  Application.CreateForm(TIndex, Index);
+  Application.Run;
+end.
